@@ -801,9 +801,8 @@ body::before {
    PDF / IMAGE EXPORT
    ═══════════════════════════════════════ */
 .export-mode #resultContent {
-  max-width: 760px;
   margin: 0 auto;
-  padding: 40px;
+  padding: 24px;
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
@@ -813,6 +812,17 @@ body::before {
   background: #FFFFFF !important;
   border: 1px solid #E5E7EB !important;
   break-inside: avoid;
+}
+.export-mode .content-section {
+  break-inside: avoid;
+}
+.export-mode .block-body {
+  padding: 20px 24px;
+}
+.export-mode .highlight-mark {
+  background: rgba(251, 191, 36, 0.25) !important;
+  box-decoration-break: slice !important;
+  -webkit-box-decoration-break: slice !important;
 }
 .export-mode .summary-text,
 .export-mode .key-point,

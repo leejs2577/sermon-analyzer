@@ -302,14 +302,10 @@
       }
     });
 
-    $('#btnCopyClipboard').addEventListener('click', () => {
+    $('#btnExportHtml').addEventListener('click', () => {
       if (!currentData) return;
-      const md = Renderer.generateMarkdown(currentData, currentVideoInfo);
-      navigator.clipboard.writeText(md).then(() => {
-        showToast('success', '클립보드에 복사되었습니다.');
-      }).catch(() => {
-        showToast('error', '복사에 실패했습니다.');
-      });
+      Renderer.exportHtml(currentData);
+      showToast('success', 'HTML 파일이 다운로드됩니다.');
     });
   }
 

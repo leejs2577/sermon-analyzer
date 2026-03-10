@@ -276,9 +276,9 @@ const Renderer = (() => {
     document.body.classList.add('export-mode');
 
     const options = {
-      margin: [15, 15, 15, 15],
+      margin: [8, 10, 8, 10],
       filename: filename,
-      image: { type: 'jpeg', quality: 0.95 },
+      image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
         scale: 2,
         useCORS: true,
@@ -290,7 +290,7 @@ const Renderer = (() => {
         format: 'a4',
         orientation: 'portrait'
       },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      pagebreak: { mode: ['css', 'legacy'] }
     };
 
     try {
@@ -307,33 +307,79 @@ const Renderer = (() => {
     const filename = `${data.meta.date || 'sermon'}_${data.meta.title || '설교분석'}.png`
       .replace(/[/\\?%*:|"<>]/g, '_');
 
-    const originalStyle = element.style.cssText;
-    element.style.padding = '40px';
-    element.style.backgroundColor = '#FAFAF8';
-    element.style.borderRadius = '0';
+    document.body.classList.add('export-mode');
 
     try {
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#FAFAF8',
-        windowWidth: 900
+        backgroundColor: '#FFFFFF'
       });
 
-      canvas.toBlob(blob => {
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-      }, 'image/png', 1.0);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png', 1.0));
+      if (blob) triggerDownload(blob, filename);
     } finally {
-      element.style.cssText = originalStyle;
+      document.body.classList.remove('export-mode');
     }
+  }
+
+  function exportHtml(data) {
+    const element = document.getElementById('resultContent');
+    if (!element) return;
+
+    const filename = `${data.meta.date || 'sermon'}_${data.meta.title || '설교분석'}.html`
+      .replace(/[/\\?%*:|"<>]/g, '_');
+
+    // 현재 페이지의 style.css 내용을 가져옴
+    const styleSheets = Array.from(document.styleSheets);
+    let cssText = '';
+    styleSheets.forEach(sheet => {
+      try {
+        if (sheet.href && sheet.href.includes('style.css')) {
+          Array.from(sheet.cssRules).forEach(rule => {
+            cssText += rule.cssText + '\n';
+          });
+        }
+      } catch (e) {
+        // CORS로 접근 불가한 스타일시트 무시
+      }
+    });
+
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(data.meta.title || '설교분석')}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #FAFAF8;
+      color: #1A1A1A;
+      margin: 0;
+      padding: 24px;
+    }
+    #resultContent {
+      max-width: 768px;
+      margin: 0 auto;
+    }
+    #resultContent > * + * {
+      margin-top: 20px;
+    }
+    ${cssText}
+  </style>
+</head>
+<body>
+  ${element.outerHTML}
+</body>
+</html>`;
+
+    downloadFile(html, filename, 'text/html;charset=utf-8');
   }
 
   // ═══════════════════════════════════════
@@ -357,12 +403,21 @@ const Renderer = (() => {
 
   function downloadFile(content, filename, mimeType) {
     const blob = new Blob([content], { type: mimeType });
+    triggerDownload(blob, filename);
+  }
+
+  function triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 300);
   }
 
   return {
@@ -370,6 +425,7 @@ const Renderer = (() => {
     exportMarkdown,
     exportPdf,
     exportImage,
+    exportHtml,
     generateMarkdown
   };
 })();
