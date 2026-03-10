@@ -275,6 +275,14 @@ const Renderer = (() => {
 
     document.body.classList.add('export-mode');
 
+    // 임시 컨테이너 생성하여 전체 콘텐츠 확보
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px';
+    tempContainer.style.width = '210mm';
+    tempContainer.appendChild(element.cloneNode(true));
+    document.body.appendChild(tempContainer);
+
     const options = {
       margin: [8, 10, 8, 10],
       filename: filename,
@@ -282,8 +290,10 @@ const Renderer = (() => {
       html2canvas: {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
-        backgroundColor: '#FFFFFF'
+        backgroundColor: '#FFFFFF',
+        windowHeight: tempContainer.scrollHeight
       },
       jsPDF: {
         unit: 'mm',
@@ -294,8 +304,9 @@ const Renderer = (() => {
     };
 
     try {
-      await html2pdf().set(options).from(element).save();
+      await html2pdf().set(options).from(tempContainer.firstChild).save();
     } finally {
+      document.body.removeChild(tempContainer);
       document.body.classList.remove('export-mode');
     }
   }
@@ -309,17 +320,30 @@ const Renderer = (() => {
 
     document.body.classList.add('export-mode');
 
+    // 임시 컨테이너 생성하여 전체 콘텐츠 확보
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px';
+    tempContainer.style.width = '800px';
+    tempContainer.style.background = '#FFFFFF';
+    tempContainer.appendChild(element.cloneNode(true));
+    document.body.appendChild(tempContainer);
+
     try {
-      const canvas = await html2canvas(element, {
+      const canvas = await html2canvas(tempContainer.firstChild, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
-        backgroundColor: '#FFFFFF'
+        backgroundColor: '#FFFFFF',
+        windowHeight: tempContainer.scrollHeight,
+        width: 800
       });
 
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png', 1.0));
       if (blob) triggerDownload(blob, filename);
     } finally {
+      document.body.removeChild(tempContainer);
       document.body.classList.remove('export-mode');
     }
   }
@@ -331,19 +355,26 @@ const Renderer = (() => {
     const filename = `${data.meta.date || 'sermon'}_${data.meta.title || '설교분석'}.html`
       .replace(/[/\\?%*:|"<>]/g, '_');
 
-    // 현재 페이지의 style.css 내용을 가져옴
+    // 현재 페이지의 모든 CSS 추출
     const styleSheets = Array.from(document.styleSheets);
     let cssText = '';
     styleSheets.forEach(sheet => {
       try {
-        if (sheet.href && sheet.href.includes('style.css')) {
+        // style.css와 Tailwind 스타일 추출
+        if (sheet.href && (sheet.href.includes('style.css') || sheet.href.includes('tailwindcss'))) {
           Array.from(sheet.cssRules).forEach(rule => {
             cssText += rule.cssText + '\n';
           });
         }
       } catch (e) {
-        // CORS로 접근 불가한 스타일시트 무시
+        // CORS로 접근 불가한 스타일시트는 무시
       }
+    });
+
+    // 내부 style 태그도 추출
+    const styleTags = document.querySelectorAll('style');
+    styleTags.forEach(tag => {
+      if (tag.textContent) cssText += '\n' + tag.textContent;
     });
 
     const html = `<!DOCTYPE html>
@@ -356,26 +387,38 @@ const Renderer = (() => {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+  <link href="https://cdn.tailwindcss.com" rel="stylesheet">
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html {
+      scroll-behavior: smooth;
+    }
     body {
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
       background: #FAFAF8;
       color: #1A1A1A;
-      margin: 0;
-      padding: 24px;
+      line-height: 1.6;
     }
     #resultContent {
       max-width: 768px;
       margin: 0 auto;
+      padding: 24px;
     }
     #resultContent > * + * {
       margin-top: 20px;
     }
+    /* 추출된 스타일 */
     ${cssText}
   </style>
 </head>
 <body>
-  ${element.outerHTML}
+  <div id="resultContent">
+    ${element.innerHTML}
+  </div>
 </body>
 </html>`;
 
