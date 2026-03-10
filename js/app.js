@@ -27,7 +27,6 @@
     setupAnalyze();
     setupExportButtons();
     updateApiStatus();
-    setupScrollReveal();
   }
 
   // ═══════════════════════════════════════
@@ -223,11 +222,23 @@
       // Step 2: 스킵
       updateProgressBar(50);
 
-      // Step 3: Gemini 분석 (영상 시청 + 웹서칭)
+      // Step 3: 설교 내용 분석
       updateStep('step3', 'active', '설교를 요약하고 있습니다');
       updateProgressBar(60);
 
-      const analysisResult = await Analyzer.analyze(videoInfo);
+      // 분석 중 60% → 90% 서서히 증가
+      const progressTimer = setInterval(() => {
+        const bar = $('#progressBar');
+        const current = parseFloat(bar.style.width) || 60;
+        if (current < 90) updateProgressBar(Math.min(current + 0.8, 90));
+      }, 300);
+
+      let analysisResult;
+      try {
+        analysisResult = await Analyzer.analyze(videoInfo);
+      } finally {
+        clearInterval(progressTimer);
+      }
       currentData = analysisResult;
 
       updateStep('step3', 'done', '완료');
@@ -239,7 +250,6 @@
       Renderer.render(analysisResult);
       showSection('resultSection');
 
-      setupScrollReveal();
       showToast('success', '설교 분석이 완료되었습니다!');
 
     } catch (error) {
@@ -356,7 +366,7 @@
   function updateProgressBar(percent) {
     $('#progressBar').style.width = `${percent}%`;
     const pct = $('#progressPercent');
-    if (pct) pct.textContent = `${percent}%`;
+    if (pct) pct.textContent = `${Math.round(percent)}%`;
   }
 
   function disableAnalyzeBtn(disabled) {
@@ -394,21 +404,6 @@
       toast.style.transition = 'all 0.3s ease';
       setTimeout(() => toast.remove(), 300);
     }, 3000);
-  }
-
-  // ─── Scroll Reveal (AOS 대체) ───
-  function setupScrollReveal() {
-    const els = document.querySelectorAll('[data-reveal]:not(.visible)');
-    if (!els.length) return;
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
-    els.forEach(el => observer.observe(el));
   }
 
   function sleep(ms) {

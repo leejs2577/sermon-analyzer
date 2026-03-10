@@ -16,17 +16,6 @@ body::before {
   background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.06), transparent 70%);
 }
 
-/* ─── Scroll Reveal ─── */
-[data-reveal] {
-  opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-}
-[data-reveal].visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 /* ─── Glass Nav (유지) ─── */
 .glass-nav {
   background: rgba(250, 250, 248, 0.85);
@@ -513,6 +502,7 @@ body::before {
   justify-content: center;
   width: 26px;
   height: 26px;
+  padding-bottom: 2px;
   background: linear-gradient(135deg, #527A5B, #6B9B76);
   color: white;
   font-size: 12px;
@@ -798,42 +788,26 @@ body::before {
 }
 
 /* ═══════════════════════════════════════
-   PDF / IMAGE EXPORT
+   PDF EXPORT (Print only — image export는 화면 그대로 캡처)
    ═══════════════════════════════════════ */
-.export-mode #resultContent {
-  margin: 0 auto;
-  padding: 24px;
-  background: #FFFFFF !important;
-  color: #1A1A1A !important;
+
+/* ─── Progress Bar Shimmer ─── */
+#progressBar {
+  position: relative;
+  overflow: hidden;
 }
-.export-mode .result-block,
-.export-mode .sermon-info-card {
-  box-shadow: none !important;
-  background: #FFFFFF !important;
-  border: 1px solid #E5E7EB !important;
-  break-inside: avoid;
+#progressBar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  animation: shimmer 1.5s ease-in-out infinite;
 }
-.export-mode .content-section {
-  break-inside: avoid;
-}
-.export-mode .block-body {
-  padding: 20px 24px;
-}
-.export-mode .highlight-mark {
-  background: rgba(251, 191, 36, 0.25) !important;
-  box-decoration-break: slice !important;
-  -webkit-box-decoration-break: slice !important;
-}
-.export-mode .summary-text,
-.export-mode .key-point,
-.export-mode .scripture-quote,
-.export-mode .closing-verse {
-  background: #F9FAFB !important;
-}
-.export-mode .tag {
-  background: #F3F4F6 !important;
-  color: #4B5563 !important;
-  border-color: #D1D5DB !important;
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 200%; }
 }
 
 /* Print */

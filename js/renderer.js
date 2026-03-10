@@ -27,6 +27,16 @@ const Renderer = (() => {
     el('sermonType').textContent = meta.worshipType || '예배';
     el('sermonTitle').textContent = meta.title || '설교 제목';
     el('sermonDate').textContent = meta.date || '날짜 미상';
+
+    // 교회명 (없으면 요소 숨김)
+    const churchWrap = el('sermonChurchWrap');
+    if (meta.church) {
+      el('sermonChurch').textContent = meta.church;
+      if (churchWrap) churchWrap.style.display = '';
+    } else {
+      if (churchWrap) churchWrap.style.display = 'none';
+    }
+
     el('sermonPreacher').textContent = meta.preacher || '설교자 미상';
     el('sermonScripture').textContent = meta.scripture || '본문 미상';
 
@@ -275,14 +285,6 @@ const Renderer = (() => {
 
     document.body.classList.add('export-mode');
 
-    // 임시 컨테이너 생성하여 전체 콘텐츠 확보
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.left = '-9999px';
-    tempContainer.style.width = '210mm';
-    tempContainer.appendChild(element.cloneNode(true));
-    document.body.appendChild(tempContainer);
-
     const options = {
       margin: [8, 10, 8, 10],
       filename: filename,
@@ -293,7 +295,12 @@ const Renderer = (() => {
         allowTaint: true,
         logging: false,
         backgroundColor: '#FFFFFF',
-        windowHeight: tempContainer.scrollHeight
+        // 뷰포트를 데스크탑 너비로 고정 → Tailwind 반응형 클래스 올바로 적용
+        windowWidth: 1200,
+        windowHeight: element.scrollHeight,
+        // 스크롤 오프셋 제거
+        scrollX: 0,
+        scrollY: -window.scrollY
       },
       jsPDF: {
         unit: 'mm',
@@ -304,9 +311,8 @@ const Renderer = (() => {
     };
 
     try {
-      await html2pdf().set(options).from(tempContainer.firstChild).save();
+      await html2pdf().set(options).from(element).save();
     } finally {
-      document.body.removeChild(tempContainer);
       document.body.classList.remove('export-mode');
     }
   }
@@ -318,33 +324,56 @@ const Renderer = (() => {
     const filename = `${data.meta.date || 'sermon'}_${data.meta.title || '설교분석'}.png`
       .replace(/[/\\?%*:|"<>]/g, '_');
 
-    document.body.classList.add('export-mode');
+    // 현재 스크롤 위치 저장 후 맨 위로 이동 (오프셋 문제 해결)
+    const prevScrollX = window.scrollX;
+    const prevScrollY = window.scrollY;
+    window.scrollTo(0, 0);
 
-    // 임시 컨테이너 생성하여 전체 콘텐츠 확보
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.left = '-9999px';
-    tempContainer.style.width = '800px';
-    tempContainer.style.background = '#FFFFFF';
-    tempContainer.appendChild(element.cloneNode(true));
-    document.body.appendChild(tempContainer);
+    // html2canvas 미지원 속성(box-decoration-break, linear-gradient) 임시 교체
+    const marks = element.querySelectorAll('.highlight-mark');
+    const origStyles = [];
+    marks.forEach(m => {
+      origStyles.push({
+        background:               m.style.background,
+        backgroundImage:          m.style.backgroundImage,
+        boxDecorationBreak:       m.style.boxDecorationBreak,
+        webkitBoxDecorationBreak: m.style.webkitBoxDecorationBreak,
+      });
+      m.style.background               = 'rgba(251, 191, 36, 0.3)';
+      m.style.backgroundImage          = 'none';
+      m.style.boxDecorationBreak       = 'slice';
+      m.style.webkitBoxDecorationBreak = 'slice';
+    });
 
     try {
-      const canvas = await html2canvas(tempContainer.firstChild, {
+      // 웹 폰트 로딩 완료 대기 (Pretendard, Noto Serif KR)
+      await document.fonts.ready;
+
+      const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
         logging: false,
-        backgroundColor: '#FFFFFF',
-        windowHeight: tempContainer.scrollHeight,
-        width: 800
+        backgroundColor: null,
+        height: element.scrollHeight,
+        width: element.scrollWidth,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: element.scrollHeight,
+        scrollX: 0,
+        scrollY: 0
       });
 
       const blob = await new Promise(r => canvas.toBlob(r, 'image/png', 1.0));
       if (blob) triggerDownload(blob, filename);
     } finally {
-      document.body.removeChild(tempContainer);
-      document.body.classList.remove('export-mode');
+      // 원래 스타일 복원
+      marks.forEach((m, i) => {
+        m.style.background               = origStyles[i].background;
+        m.style.backgroundImage          = origStyles[i].backgroundImage;
+        m.style.boxDecorationBreak       = origStyles[i].boxDecorationBreak;
+        m.style.webkitBoxDecorationBreak = origStyles[i].webkitBoxDecorationBreak;
+      });
+      window.scrollTo(prevScrollX, prevScrollY);
     }
   }
 

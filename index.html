@@ -194,7 +194,7 @@
   <main class="max-w-3xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-16 sm:pb-24">
 
     <!-- HERO / INPUT SECTION -->
-    <section class="text-center mb-8 sm:mb-10" data-reveal>
+    <section class="text-center mb-8 sm:mb-10">
       <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 border border-brand-200/60 dark:border-brand-700/40 text-brand-700 dark:text-brand-300 text-xs font-semibold mb-5">
         🌿 말씀을 삶으로 이어주는 시간
       </div>
@@ -208,7 +208,7 @@
       </p>
 
       <!-- Input Card -->
-      <div class="glass-card p-4 sm:p-5 mx-auto max-w-2xl" data-reveal>
+      <div class="glass-card p-4 sm:p-5 mx-auto max-w-2xl">
         <div class="flex flex-col sm:flex-row gap-3">
           <div class="flex-1 relative group">
             <div class="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center">
@@ -243,7 +243,7 @@
     </section>
 
     <!-- VIDEO PREVIEW (hidden) -->
-    <section id="videoPreview" class="mb-6 hidden" data-reveal>
+    <section id="videoPreview" class="mb-6 hidden">
       <div class="glass-card p-3 flex flex-col sm:flex-row gap-4 items-center">
         <div class="relative w-full sm:w-48 flex-shrink-0 aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
           <img id="videoThumbnail" src="" alt="Video thumbnail" class="w-full h-full object-cover">
@@ -262,7 +262,7 @@
 
     <!-- PROGRESS SECTION (hidden) -->
     <section id="progressSection" class="mb-6 hidden">
-      <div class="glass-card p-5 sm:p-6" data-reveal>
+      <div class="glass-card p-5 sm:p-6">
         <div class="flex items-center gap-2 mb-5">
           <div class="w-6 h-6 rounded-md bg-brand-500/10 flex items-center justify-center">
             <i data-lucide="loader-2" class="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 animate-spin"></i>
@@ -277,7 +277,7 @@
               <i data-lucide="video" class="w-4 h-4"></i>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="step-title">영상 정보 추출</p>
+              <p class="step-title">설교 정보 추출</p>
               <p class="step-status">대기 중</p>
             </div>
           </div>
@@ -287,7 +287,7 @@
               <i data-lucide="file-audio" class="w-4 h-4"></i>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="step-title">영상 데이터 준비</p>
+              <p class="step-title">설교 스크립트 정리</p>
               <p class="step-status">대기 중</p>
             </div>
           </div>
@@ -297,7 +297,7 @@
               <i data-lucide="brain" class="w-4 h-4"></i>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="step-title">Gemini 영상 분석</p>
+              <p class="step-title">설교 내용 분석 및 정리</p>
               <p class="step-status">대기 중</p>
             </div>
           </div>
@@ -315,7 +315,7 @@
 
     <!-- ERROR SECTION (hidden) -->
     <section id="errorSection" class="mb-6 hidden">
-      <div class="glass-card p-8 text-center" data-reveal>
+      <div class="glass-card p-8 text-center">
         <div class="w-14 h-14 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
           <i data-lucide="alert-triangle" class="w-7 h-7 text-red-500"></i>
         </div>
@@ -333,7 +333,7 @@
     <section id="resultSection" class="hidden">
 
       <!-- Export Toolbar -->
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-5 p-3 rounded-2xl glass-card" data-reveal>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-5 p-3 rounded-2xl glass-card">
         <div class="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
           <i data-lucide="download" class="w-4 h-4"></i>
           내보내기
@@ -358,7 +358,7 @@
       <div id="resultContent" class="space-y-5">
 
         <!-- Sermon Info Card -->
-        <div class="sermon-info-card" id="sermonInfoCard" data-reveal>
+        <div class="sermon-info-card" id="sermonInfoCard">
           <div class="flex flex-wrap items-center gap-2 mb-3">
             <span id="sermonType" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-500 text-white text-[11px] font-bold shadow-sm">주일예배</span>
           </div>
@@ -367,6 +367,10 @@
             <div class="meta-item">
               <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>
               <span id="sermonDate">날짜</span>
+            </div>
+            <div class="meta-item" id="sermonChurchWrap">
+              <i data-lucide="church" class="w-3.5 h-3.5"></i>
+              <span id="sermonChurch">교회</span>
             </div>
             <div class="meta-item">
               <i data-lucide="user" class="w-3.5 h-3.5"></i>
@@ -381,7 +385,7 @@
         </div>
 
         <!-- 1) Summary -->
-        <div class="result-block" data-reveal>
+        <div class="result-block">
           <div class="block-header block-header-summary">
             <div class="block-icon">
               <i data-lucide="bookmark" class="w-4 h-4"></i>
@@ -394,7 +398,7 @@
         </div>
 
         <!-- 2) Content Sections -->
-        <div class="result-block" data-reveal>
+        <div class="result-block">
           <div class="block-header block-header-content">
             <div class="block-icon">
               <i data-lucide="list-ordered" class="w-4 h-4"></i>
@@ -407,7 +411,7 @@
         </div>
 
         <!-- 3) Conclusion & Meditation -->
-        <div class="result-block" data-reveal>
+        <div class="result-block">
           <div class="block-header block-header-meditation">
             <div class="block-icon">
               <i data-lucide="heart-handshake" class="w-4 h-4"></i>
