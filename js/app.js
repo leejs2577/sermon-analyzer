@@ -206,11 +206,11 @@
     disableAnalyzeBtn(true);
 
     // Gemini 직접 분석: 자막 추출 단계 스킵
-    updateStep('step2', 'done', 'Gemini 영상 직접 분석 — 스킵');
+    updateStep('step2', 'done', '완료');
 
     try {
       // Step 1: 영상 정보 추출
-      updateStep('step1', 'active', '정보 추출 중...');
+      updateStep('step1', 'active', '준비중');
       updateProgressBar(15);
 
       const videoInfo = await YouTube.fetchVideoInfo(videoId);
@@ -224,7 +224,7 @@
       updateProgressBar(50);
 
       // Step 3: Gemini 분석 (영상 시청 + 웹서칭)
-      updateStep('step3', 'active', 'Gemini가 영상 시청 + 웹서칭 중... (1~3분 소요)');
+      updateStep('step3', 'active', '설교를 요약하고 있습니다');
       updateProgressBar(60);
 
       const analysisResult = await Analyzer.analyze(videoInfo);
@@ -355,6 +355,8 @@
 
   function updateProgressBar(percent) {
     $('#progressBar').style.width = `${percent}%`;
+    const pct = $('#progressPercent');
+    if (pct) pct.textContent = `${percent}%`;
   }
 
   function disableAnalyzeBtn(disabled) {
