@@ -13,18 +13,19 @@ exports.handler = async (event) => {
       channelId = directMatch[1];
     } else {
       // /@handle 등의 형식 — 채널 페이지 HTML에서 channelId 추출
-      const pageRes = await fetch(channelUrl, {
+      const normalizedUrl = new URL(channelUrl).href; // 한글 경로를 퍼센트 인코딩
+      const pageRes = await fetch(normalizedUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SermonAnalyzer/1.0)' }
       });
       if (!pageRes.ok) {
         return { statusCode: 400, body: JSON.stringify({ error: '채널 페이지를 불러올 수 없습니다.' }) };
       }
       const html = await pageRes.text();
-      // browseId, channelId, externalId 순으로 시도
+      // externalId 우선 — 채널 자신의 ID를 가리키는 키 (browseId는 다른 채널 ID를 먼저 캡처할 수 있음)
       const match =
-        html.match(/"browseId":"(UC[a-zA-Z0-9_-]+)"/) ||
+        html.match(/"externalId":"(UC[a-zA-Z0-9_-]+)"/) ||
         html.match(/"channelId":"(UC[a-zA-Z0-9_-]+)"/) ||
-        html.match(/"externalId":"(UC[a-zA-Z0-9_-]+)"/);
+        html.match(/"browseId":"(UC[a-zA-Z0-9_-]+)"/);
       if (!match) {
         return { statusCode: 400, body: JSON.stringify({ error: '채널 ID를 찾을 수 없습니다. URL을 확인해주세요.' }) };
       }
@@ -33,9 +34,11 @@ exports.handler = async (event) => {
 
     // RSS 피드 조회
     const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-    const rssRes = await fetch(rssUrl);
+    const rssRes = await fetch(rssUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SermonAnalyzer/1.0)' }
+    });
     if (!rssRes.ok) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'RSS 피드를 가져올 수 없습니다.' }) };
+      return { statusCode: 400, body: JSON.stringify({ error: `RSS 피드를 가져올 수 없습니다. (HTTP ${rssRes.status})` }) };
     }
     const xml = await rssRes.text();
 
