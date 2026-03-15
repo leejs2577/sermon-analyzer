@@ -22,11 +22,9 @@
 
   function init() {
     setupTheme();
-    setupApiModal();
     setupUrlInput();
     setupAnalyze();
     setupExportButtons();
-    updateApiStatus();
   }
 
   // ═══════════════════════════════════════
@@ -52,85 +50,6 @@
     if (iconEl) {
       iconEl.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
       if (typeof lucide !== 'undefined') lucide.createIcons();
-    }
-  }
-
-  // ═══════════════════════════════════════
-  // API MODAL (Gemini only)
-  // ═══════════════════════════════════════
-  function setupApiModal() {
-    const modal = $('#apiModal');
-
-    // Open
-    $('#btnApiSettings').addEventListener('click', () => {
-      loadApiConfig();
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
-    });
-
-    // Close
-    $('#btnCloseModal').addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-
-    function closeModal() {
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-    }
-
-    // Toggle Password Visibility
-    $$('.toggle-visibility').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetId = btn.getAttribute('data-target');
-        const input = $(`#${targetId}`);
-        const iconEl = btn.querySelector('[data-lucide]');
-        if (input.type === 'password') {
-          input.type = 'text';
-          if (iconEl) iconEl.setAttribute('data-lucide', 'eye-off');
-        } else {
-          input.type = 'password';
-          if (iconEl) iconEl.setAttribute('data-lucide', 'eye');
-        }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      });
-    });
-
-    // Save
-    $('#btnSaveApi').addEventListener('click', () => {
-      saveApiConfig();
-      closeModal();
-    });
-  }
-
-  function loadApiConfig() {
-    const config = ApiConfig.get();
-    $('#geminiApiKey').value = config.keys.gemini || '';
-    $('#modelSelect').value = config.model;
-  }
-
-  function saveApiConfig() {
-    const model = $('#modelSelect').value;
-    const keys = {
-      gemini: $('#geminiApiKey').value.trim()
-    };
-
-    ApiConfig.update({ model, keys });
-    updateApiStatus();
-    showToast('success', 'API 설정이 저장되었습니다.');
-  }
-
-  function updateApiStatus() {
-    const statusDot = $('#apiStatus .status-dot');
-    const statusText = $('#apiStatus .status-text');
-
-    if (ApiConfig.isConfigured()) {
-      const model = ApiConfig.getModel();
-      statusDot.className = 'status-dot status-active';
-      statusText.innerHTML = `<span class="text-gray-600 dark:text-gray-300">API 연결됨</span>`;
-    } else {
-      statusDot.className = 'status-dot status-inactive';
-      statusText.innerHTML = 'Gemini API 키가 설정되지 않았습니다. 상단의 <strong class="text-gray-500 dark:text-gray-400">API 설정</strong>을 먼저 완료해주세요.';
     }
   }
 
@@ -184,12 +103,6 @@
     const videoId = YouTube.extractVideoId(url);
     if (!videoId) {
       showToast('error', '유효한 YouTube URL이 아닙니다.');
-      return;
-    }
-
-    if (!ApiConfig.isConfigured()) {
-      showToast('error', 'Gemini API 키를 먼저 설정해주세요.');
-      $('#btnApiSettings').click();
       return;
     }
 
