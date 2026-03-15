@@ -22,9 +22,11 @@
 
   function init() {
     setupTheme();
+    setupFavoritesModal();
     setupUrlInput();
     setupAnalyze();
     setupExportButtons();
+    loadRecentVideos();
   }
 
   // ═══════════════════════════════════════
@@ -51,6 +53,127 @@
       iconEl.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
+  }
+
+  // ═══════════════════════════════════════
+  // FAVORITES MODAL
+  // ═══════════════════════════════════════
+  function setupFavoritesModal() {
+    const modal = $('#favoritesModal');
+
+    $('#btnFavorites').addEventListener('click', () => {
+      const saved = JSON.parse(localStorage.getItem('sermon_favorites') || '{}');
+      $('#fav1Url').value = saved.fav1 || '';
+      $('#fav2Url').value = saved.fav2 || '';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    });
+
+    $('#btnCloseFavModal').addEventListener('click', closeFavModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeFavModal(); });
+
+    function closeFavModal() {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    $('#btnSaveFavorites').addEventListener('click', () => {
+      const fav1 = $('#fav1Url').value.trim();
+      const fav2 = $('#fav2Url').value.trim();
+      localStorage.setItem('sermon_favorites', JSON.stringify({ fav1, fav2 }));
+      closeFavModal();
+      showToast('success', '즐겨찾기가 저장되었습니다.');
+      loadRecentVideos();
+    });
+  }
+
+  async function loadRecentVideos() {
+    const saved = JSON.parse(localStorage.getItem('sermon_favorites') || '{}');
+    const urls = [saved.fav1, saved.fav2].filter(Boolean);
+
+    if (urls.length === 0) {
+      hideSection('recentVideosSection');
+      return;
+    }
+
+    const grid = $('#recentVideosGrid');
+    grid.innerHTML = '';
+
+    // 채널 수에 따라 외부 그리드 레이아웃 설정
+    grid.className = urls.length === 2
+      ? 'grid grid-cols-1 sm:grid-cols-2 gap-3'
+      : 'grid grid-cols-1 gap-3';
+
+    // 각 채널별 컬럼 생성 (스켈레톤 로딩)
+    const cols = urls.map((_, i) => {
+      const col = document.createElement('div');
+      // 1채널: 카드 3개를 가로 나열, 2채널: 세로 스택
+      col.className = urls.length === 2
+        ? 'flex flex-col gap-3'
+        : 'grid grid-cols-1 sm:grid-cols-3 gap-3';
+      col.innerHTML = [0,1,2].map(() =>
+        `<div class="rounded-xl bg-gray-100 dark:bg-gray-800/50 animate-pulse" style="height:90px"></div>`
+      ).join('');
+      grid.appendChild(col);
+      return col;
+    });
+
+    showSection('recentVideosSection');
+
+    // 병렬로 채널 영상 fetch
+    await Promise.all(urls.map(async (url, i) => {
+      try {
+        const res = await fetch(`/api/youtube-feed?channelUrl=${encodeURIComponent(decodeURIComponent(url))}`);
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'API 오류');
+
+        cols[i].innerHTML = '';
+        data.videos.forEach(video => cols[i].appendChild(createVideoCard(video)));
+
+        // 채널명으로 섹션 헤더 업데이트
+        const label = $('#recentVideosLabel');
+        if (label) {
+          if (urls.length === 1 && data.channelName) {
+            label.textContent = `${data.channelName} 최근 영상`;
+          } else {
+            label.textContent = '즐겨찾기 최근 영상';
+          }
+        }
+      } catch (err) {
+        cols[i].innerHTML = `<p class="text-xs text-red-400 p-2">불러오기 실패: ${err.message}</p>`;
+      }
+    }));
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  function createVideoCard(video) {
+    const card = document.createElement('button');
+    card.className = 'video-card';
+    const date = video.published
+      ? new Date(video.published).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+      : '';
+    card.innerHTML = `
+      <div class="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 mb-2">
+        <img src="${video.thumbnail}" alt="" class="w-full h-full object-cover" loading="lazy"
+             onerror="this.src='https://img.youtube.com/vi/${video.videoId}/hqdefault.jpg'">
+        <div class="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity">
+          <div class="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center shadow">
+            <i data-lucide="play" class="w-3.5 h-3.5 text-gray-900 ml-0.5"></i>
+          </div>
+        </div>
+      </div>
+      <p class="video-card-title">${video.title}</p>
+      ${date ? `<p class="video-card-date">${date}</p>` : ''}
+    `;
+    card.addEventListener('click', () => {
+      const urlInput = $('#youtubeUrl');
+      urlInput.value = video.url;
+      $('#btnClearUrl').classList.remove('hidden');
+      urlInput.focus();
+      showToast('success', 'URL이 입력되었습니다. 분석 시작을 눌러주세요.');
+    });
+    return card;
   }
 
   // ═══════════════════════════════════════
@@ -113,6 +236,7 @@
     hideSection('videoPreview');
     hideSection('resultSection');
     hideSection('errorSection');
+    hideSection('recentVideosSection');
     showSection('progressSection');
     resetProgress();
     disableAnalyzeBtn(true);
