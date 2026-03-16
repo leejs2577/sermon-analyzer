@@ -43,7 +43,7 @@ exports.handler = async (event) => {
     const xml = await rssRes.text();
 
     // 라이브 영상 제외 키워드
-    const LIVE_KEYWORDS = ['라이브', 'LIVE', 'Live', '실시간', '🔴', '스트리밍', 'streaming', 'Streaming'];
+    const LIVE_KEYWORDS = ['라이브', 'LIVE', 'Live', '실시간', '🔴', '스트리밍', 'streaming', 'Streaming', '새벽기도회'];
 
     // 최근 3개 항목 파싱 (라이브 제외)
     const videos = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)]
