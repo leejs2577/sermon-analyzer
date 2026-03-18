@@ -1,22 +1,22 @@
 // 카카오톡 인앱 브라우저 파일 다운로드 대응
-// HTTP Content-Disposition 헤더 방식 — iOS/Android 모두 지원
+// Form POST submit 방식 — 브라우저가 직접 HTTP 응답 처리하여 다운로드 매니저 트리거
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  let content, filename, contentType;
-  try {
-    ({ content, filename, contentType } = JSON.parse(event.body));
-  } catch (e) {
-    return { statusCode: 400, body: 'Invalid JSON' };
+  // Form submit: application/x-www-form-urlencoded 파싱
+  const params = new URLSearchParams(event.body);
+  const contentB64  = params.get('content');     // Base64 인코딩된 파일 내용
+  const filename    = params.get('filename');
+  const contentType = params.get('contentType');
+
+  if (!contentB64 || !filename || !contentType) {
+    return { statusCode: 400, body: '필수 필드 누락' };
   }
 
-  if (!content || !filename || !contentType) {
-    return { statusCode: 400, body: 'content, filename, contentType 필드가 필요합니다.' };
-  }
-
-  // 파일명 특수문자 제거
+  // Base64 → 원본 텍스트 (UTF-8, 한글 안전)
+  const content = Buffer.from(contentB64, 'base64').toString('utf-8');
   const safeFilename = filename.replace(/[/\\?%*:|"<>]/g, '_');
 
   return {

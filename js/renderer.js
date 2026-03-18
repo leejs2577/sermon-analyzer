@@ -385,21 +385,35 @@ const Renderer = (() => {
     return /KAKAOTALK/i.test(navigator.userAgent);
   }
 
-  // 카카오톡 대응 — Netlify Function 경유 서버 다운로드
-  async function downloadViaServer(content, filename, contentType) {
-    try {
-      const res = await fetch('/.netlify/functions/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, filename, contentType }),
-      });
-      if (!res.ok) throw new Error('서버 응답 오류');
-      const blob = await res.blob();
-      triggerDownload(blob, filename);
-    } catch (e) {
-      // 서버 다운로드 실패 시 일반 방식으로 폴백
-      downloadFile(content, filename, contentType);
-    }
+  // 카카오톡 대응 — Form POST submit 방식 (브라우저 HTTP 레이어 직접 사용)
+  // fetch() 방식은 Content-Disposition 헤더가 JS에 묻혀 다운로드 매니저가 개입하지 않으므로
+  // form.submit()으로 브라우저가 직접 HTTP 응답을 처리하게 함
+  function downloadViaServer(content, filename, contentType) {
+    // Base64 인코딩: 한글·HTML 특수문자(&, =, + 등) 안전 전송
+    const contentB64 = btoa(unescape(encodeURIComponent(content)));
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/.netlify/functions/download';
+    // target="_blank": 현재 페이지 유지, 새 탭/다운로드로 처리
+    form.target = '_blank';
+    form.style.display = 'none';
+
+    const addField = (name, value) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    };
+
+    addField('content', contentB64);
+    addField('filename', filename);
+    addField('contentType', contentType);
+
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(() => document.body.removeChild(form), 1000);
   }
 
   function downloadFile(content, filename, mimeType) {
