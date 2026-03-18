@@ -353,24 +353,7 @@
       showToast('success', 'Markdown 파일이 다운로드됩니다.');
     });
 
-$('#btnExportImage').addEventListener('click', async () => {
-      if (!currentData) return;
-      const btn = $('#btnExportImage');
-      btn.classList.add('loading');
-      btn.innerHTML = '<span class="spinner"></span> 캡처 중...';
-      try {
-        await Renderer.exportImage(currentData);
-        showToast('success', '이미지가 다운로드됩니다.');
-      } catch (e) {
-        showToast('error', '이미지 캡처에 실패했습니다.');
-      } finally {
-        btn.classList.remove('loading');
-        btn.innerHTML = '<i data-lucide="image" class="w-3.5 h-3.5"></i> 이미지';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      }
-    });
-
-    $('#btnExportHtml').addEventListener('click', () => {
+$('#btnExportHtml').addEventListener('click', () => {
       if (!currentData) return;
       Renderer.exportHtml(currentData);
       showToast('success', 'HTML 파일이 다운로드됩니다.');

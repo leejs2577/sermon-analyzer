@@ -5,6 +5,13 @@ exports.handler = async (event) => {
 
   const { prompt, youtubeUrl } = JSON.parse(event.body);
   const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' })
+    };
+  }
+
   const model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;

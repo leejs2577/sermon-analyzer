@@ -196,7 +196,11 @@ const Renderer = (() => {
     const md = generateMarkdown(data, videoInfo);
     const filename = `${data.meta.date || 'sermon'}_${data.meta.title || '설교분석'}.md`
       .replace(/[/\\?%*:|"<>]/g, '_');
-    downloadFile(md, filename, 'text/markdown;charset=utf-8');
+    if (isKakaoTalkBrowser()) {
+      downloadViaServer(md, filename, 'text/markdown;charset=utf-8');
+    } else {
+      downloadFile(md, filename, 'text/markdown;charset=utf-8');
+    }
   }
 
   function generateMarkdown(data, videoInfo) {
@@ -276,43 +280,6 @@ const Renderer = (() => {
     return md;
   }
 
-  async function exportImage(data) {
-    const element = document.getElementById('resultContent');
-    if (!element) return;
-
-    const filename = `${data.meta.date || 'sermon'}_${data.meta.title || '설교분석'}.png`
-      .replace(/[/\\?%*:|"<>]/g, '_');
-
-    // 현재 스크롤 위치 저장 후 맨 위로 이동 (오프셋 문제 해결)
-    const prevScrollX = window.scrollX;
-    const prevScrollY = window.scrollY;
-    window.scrollTo(0, 0);
-
-    try {
-      // 웹 폰트 로딩 완료 대기 (Pretendard, Noto Serif KR)
-      await document.fonts.ready;
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: null,
-        height: element.scrollHeight,
-        width: element.offsetWidth,
-        windowWidth: element.offsetWidth,
-        windowHeight: element.scrollHeight,
-        scrollX: 0,
-        scrollY: 0
-      });
-
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/png', 1.0));
-      if (blob) triggerDownload(blob, filename);
-    } finally {
-      window.scrollTo(prevScrollX, prevScrollY);
-    }
-  }
-
   function exportHtml(data) {
     const element = document.getElementById('resultContent');
     if (!element) return;
@@ -387,7 +354,11 @@ const Renderer = (() => {
 </body>
 </html>`;
 
-    downloadFile(html, filename, 'text/html;charset=utf-8');
+    if (isKakaoTalkBrowser()) {
+      downloadViaServer(html, filename, 'text/html;charset=utf-8');
+    } else {
+      downloadFile(html, filename, 'text/html;charset=utf-8');
+    }
   }
 
   // ═══════════════════════════════════════
@@ -407,6 +378,28 @@ const Renderer = (() => {
     // **bold** → <strong>
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-emphasis">$1</strong>');
     return html;
+  }
+
+  // 카카오톡 인앱 브라우저 감지
+  function isKakaoTalkBrowser() {
+    return /KAKAOTALK/i.test(navigator.userAgent);
+  }
+
+  // 카카오톡 대응 — Netlify Function 경유 서버 다운로드
+  async function downloadViaServer(content, filename, contentType) {
+    try {
+      const res = await fetch('/.netlify/functions/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, filename, contentType }),
+      });
+      if (!res.ok) throw new Error('서버 응답 오류');
+      const blob = await res.blob();
+      triggerDownload(blob, filename);
+    } catch (e) {
+      // 서버 다운로드 실패 시 일반 방식으로 폴백
+      downloadFile(content, filename, contentType);
+    }
   }
 
   function downloadFile(content, filename, mimeType) {
@@ -431,7 +424,6 @@ const Renderer = (() => {
   return {
     render,
     exportMarkdown,
-exportImage,
     exportHtml,
     generateMarkdown
   };
