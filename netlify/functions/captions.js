@@ -98,7 +98,12 @@ async function tryWebHtmlParsing(videoId, log) {
     log.push(`html_len_${html.length}`);
 
     const hasRecaptcha = html.includes('class="g-recaptcha"');
-    if (hasRecaptcha) { log.push('html_recaptcha'); return null; }
+    const hasConsent = html.includes('consent.youtube.com') || html.includes('CONSENT');
+    const hasPlayerResponse = html.includes('ytInitialPlayerResponse');
+    const hasCaptionTracks = html.includes('"captionTracks"');
+    log.push(`html_recaptcha_${hasRecaptcha}_consent_${hasConsent}_playerResp_${hasPlayerResponse}_captionTracks_${hasCaptionTracks}`);
+
+    if (hasRecaptcha) return null;
 
     const tracks = extractTracksFromHtml(html);
     const selected = selectKoreanTrack(tracks);
