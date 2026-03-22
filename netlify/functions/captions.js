@@ -24,17 +24,21 @@ exports.handler = async (event) => {
   const debugLog = [];
 
   try {
-    // 1차 시도: ANDROID Innertube API
-    const result = await tryAndroidInnertube(videoId, debugLog);
-    if (result) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: result, method: 'android' }) };
-    }
+    // 1차: ANDROID Innertube API (로컬/가정용 IP에서 동작)
+    const r1 = await tryAndroidInnertube(videoId, debugLog);
+    if (r1) return ok(headers, r1, 'android');
 
-    // 2차 시도: WEB HTML 파싱
-    const result2 = await tryWebHtmlParsing(videoId, debugLog);
-    if (result2) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: result2, method: 'web' }) };
-    }
+    // 2차: WEB Innertube Player API (클라우드 IP 대응)
+    const r2 = await tryWebInnertube(videoId, debugLog);
+    if (r2) return ok(headers, r2, 'web_innertube');
+
+    // 3차: WEB HTML 파싱 + timedtext
+    const r3 = await tryWebHtmlParsing(videoId, debugLog);
+    if (r3) return ok(headers, r3, 'web_html');
+
+    // 4차: get_transcript API (독립 시도)
+    const r4 = await tryGetTranscriptDirect(videoId, debugLog);
+    if (r4) return ok(headers, r4, 'get_transcript');
 
     return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: debugLog }) };
 
@@ -43,6 +47,10 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: debugLog }) };
   }
 };
+
+function ok(headers, captions, method) {
+  return { statusCode: 200, headers, body: JSON.stringify({ captions, method }) };
+}
 
 /**
  * 1차: ANDROID Innertube Player API
@@ -80,7 +88,52 @@ async function tryAndroidInnertube(videoId, log) {
 }
 
 /**
- * 2차: YouTube WEB 페이지 HTML 파싱
+ * 2차: WEB Innertube Player API (POST)
+ * ANDROID와 달리 WEB 클라이언트는 클라우드 IP에서도 동작할 수 있음
+ */
+async function tryWebInnertube(videoId, log) {
+  try {
+    const res = await fetch(INNERTUBE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': WEB_UA,
+        'Origin': 'https://www.youtube.com',
+        'Referer': 'https://www.youtube.com/',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20241201.00.00',
+            hl: 'ko',
+            gl: 'KR',
+          },
+        },
+        videoId,
+      }),
+    });
+
+    if (!res.ok) { log.push(`web_innertube_http_${res.status}`); return null; }
+    const data = await res.json();
+    const status = data?.playabilityStatus?.status;
+    log.push(`web_innertube_play_${status}`);
+
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    const selected = selectKoreanTrack(tracks);
+    if (!selected) { log.push(`web_innertube_tracks_${tracks ? tracks.length : 'null'}`); return null; }
+
+    const text = await fetchCaptionText(selected.baseUrl, WEB_UA);
+    if (!text) { log.push('web_innertube_timedtext_empty'); return null; }
+    return text;
+  } catch (e) {
+    log.push(`web_innertube_error: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * 3차: YouTube WEB 페이지 HTML 파싱
  * ytInitialPlayerResponse에서 captionTracks 추출 후 timedtext fetch
  */
 async function tryWebHtmlParsing(videoId, log) {
@@ -248,6 +301,71 @@ async function tryGetTranscript(html, videoId, log) {
 /**
  * get_transcript params 생성 (base64 인코딩 protobuf)
  */
+/**
+ * 4차: get_transcript API 직접 호출 (HTML 없이)
+ * YouTube 공개 innertube API 키 사용
+ */
+async function tryGetTranscriptDirect(videoId, log) {
+  try {
+    const params = buildTranscriptParams(videoId);
+    // 공개 innertube API 키
+    const apiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+
+    const res = await fetch(`https://www.youtube.com/youtubei/v1/get_transcript?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': WEB_UA,
+        'Origin': 'https://www.youtube.com',
+        'Referer': 'https://www.youtube.com/',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20241201.00.00',
+            hl: 'ko',
+            gl: 'KR',
+          },
+        },
+        params,
+      }),
+    });
+
+    log.push(`direct_transcript_http_${res.status}`);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (data.error) {
+      log.push(`direct_transcript_err_${data.error.status || data.error.code}`);
+      return null;
+    }
+
+    // 트랜스크립트 세그먼트 추출
+    const segments = data?.actions?.[0]?.updateEngagementPanelAction
+      ?.content?.transcriptRenderer?.content
+      ?.transcriptSearchPanelRenderer?.body
+      ?.transcriptSegmentListRenderer?.initialSegments;
+
+    if (!Array.isArray(segments) || segments.length === 0) {
+      log.push(`direct_transcript_no_segments`);
+      return null;
+    }
+
+    const texts = segments
+      .map(seg => seg?.transcriptSegmentRenderer?.snippet?.runs?.map(r => r.text).join('') || '')
+      .filter(Boolean);
+
+    if (texts.length === 0) { log.push('direct_transcript_empty_texts'); return null; }
+
+    log.push(`direct_transcript_ok_${texts.length}`);
+    return texts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch (e) {
+    log.push(`direct_transcript_error: ${e.message}`);
+    return null;
+  }
+}
+
 function buildTranscriptParams(videoId) {
   // 간단한 protobuf 인코딩: field 1 { field 1: videoId }
   const vidBytes = Buffer.from(videoId, 'utf8');
