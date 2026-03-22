@@ -37,6 +37,11 @@ const Analyzer = (() => {
       result.meta.preacher = preResolved.preacher;
     }
 
+    // YouTube 발행 날짜를 항상 우선 적용
+    if (videoInfo.publishedAt) {
+      result.meta.date = videoInfo.publishedAt;
+    }
+
     return result;
   }
 
@@ -80,11 +85,6 @@ const Analyzer = (() => {
 - 교회명을 확인할 수 없으면 meta.church를 빈 문자열("")로 두세요. 절대 추측하지 마세요.`;
     }
 
-    // YouTube 발행 날짜 힌트 (있으면 프롬프트에 주입)
-    const publishedHint = videoInfo.publishedAt
-      ? `- YouTube 영상 발행 날짜: ${videoInfo.publishedAt} ← 영상 제목에 날짜가 명시되지 않은 경우 이 날짜를 date 값으로 사용하세요.`
-      : '';
-
     return `당신은 한국 개신교 설교를 깊이 이해하고, 핵심을 정리하여 성도에게 전달하는 전문가입니다.
 
 위에 첨부된 YouTube 설교 영상을 **처음부터 끝까지** 시청하고, 아래 지침에 따라 분석해 주세요.
@@ -95,7 +95,6 @@ const Analyzer = (() => {
 - 영상 제목: ${videoInfo.title || '(알 수 없음)'}
 - 채널명: ${videoInfo.channel || '(알 수 없음)'}
 - URL: ${videoInfo.url || ''}
-${publishedHint}
 ${metaInstruction}
 
 ═══════════════════════════════════
@@ -130,7 +129,7 @@ ${metaInstruction}
 
 {
   "meta": {
-    "date": "설교 날짜 (YYYY-MM-DD 형식). 아래 우선순위로 확인하여 변환: 1순위) 영상 제목에 포함된 날짜 패턴 — '260528'(YYMMDD)·'20260528'(YYYYMMDD)·'26.05.28'·'2026.05.28'·'5월 28일'·'2026-05-28' 등 날짜로 해석 가능한 모든 형식을 YYYY-MM-DD로 변환 (2자리 연도는 2000년대로 해석, 예: 26→2026). 2순위) 영상 설명란의 날짜 표기. 3순위) 위 메타 정보에 제공된 'YouTube 영상 발행 날짜' 값을 그대로 사용. 자막에서의 추론은 하지 않음. 확인 불가 시에도 YouTube 영상 발행 날짜가 있으면 반드시 그 값을 사용하세요.",
+    "date": "설교 날짜 (YYYY-MM-DD 형식). 빈 문자열로 남겨도 됩니다.",
     "preacher": "설교자 이름 (확인 불가 시 빈 문자열. 절대 추측 금지)",
     "church": "교회명 (확인 불가 시 빈 문자열. 절대 추측 금지)",
     "scripture": "성경 본문 (예: 누가복음 5:17-26)",
