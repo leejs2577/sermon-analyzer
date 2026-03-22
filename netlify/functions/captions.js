@@ -23,6 +23,8 @@ exports.handler = async (event) => {
   }
 
   try {
+    const hasToken = !!process.env.APIFY_TOKEN;
+
     // 1차: Apify Actor (클라우드 IP에서도 동작)
     const apifyResult = await tryApify(videoId);
     if (apifyResult) {
@@ -35,7 +37,7 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ captions: androidResult }) };
     }
 
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: { hasToken, envKeys: Object.keys(process.env).filter(k => k.includes('APIFY')) } }) };
 
   } catch (e) {
     console.error(`[captions] 에러:`, e.message);
