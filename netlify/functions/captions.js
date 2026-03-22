@@ -23,10 +23,10 @@ exports.handler = async (event) => {
   }
 
   try {
-    const hasToken = !!process.env.APIFY_TOKEN;
+    const debug = { hasToken: !!process.env.APIFY_TOKEN };
 
     // 1차: Apify Actor (클라우드 IP에서도 동작)
-    const apifyResult = await tryApify(videoId);
+    const apifyResult = await tryApify(videoId, debug);
     if (apifyResult) {
       return { statusCode: 200, headers, body: JSON.stringify({ captions: apifyResult }) };
     }
@@ -37,7 +37,7 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ captions: androidResult }) };
     }
 
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: { hasToken, envKeys: Object.keys(process.env).filter(k => k.includes('APIFY')) } }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug }) };
 
   } catch (e) {
     console.error(`[captions] 에러:`, e.message);
@@ -49,9 +49,9 @@ exports.handler = async (event) => {
  * Apify Actor로 자막 추출
  * 프록시 IP를 사용하므로 클라우드 환경에서도 YouTube 자막 접근 가능
  */
-async function tryApify(videoId) {
+async function tryApify(videoId, debug) {
   const token = process.env.APIFY_TOKEN;
-  if (!token) return null;
+  if (!token) { debug.apify = 'no_token'; return null; }
 
   try {
     const res = await fetch(APIFY_URL, {
@@ -69,22 +69,23 @@ async function tryApify(videoId) {
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');
-      console.log(`[captions] Apify 실패: ${res.status} ${errBody.substring(0, 300)}`);
+      debug.apify = `http_${res.status}_${errBody.substring(0, 200)}`;
       return null;
     }
 
     const items = await res.json();
-    console.log(`[captions] Apify 응답 항목 수: ${items?.length}, 첫 항목 키: ${items?.[0] ? Object.keys(items[0]).join(',') : 'none'}`);
+    debug.apify_items = items?.length || 0;
+    debug.apify_keys = items?.[0] ? Object.keys(items[0]) : [];
 
     const text = items?.[0]?.text || items?.[0]?.transcript || items?.[0]?.content || null;
 
     if (!text || text.length < 100) {
-      console.log(`[captions] Apify 텍스트 부족: ${text ? text.length : 'null'}`);
+      debug.apify_textLen = text ? text.length : 0;
       return null;
     }
     return text;
   } catch (e) {
-    console.log(`[captions] Apify 에러: ${e.message}`);
+    debug.apify = `error_${e.message}`;
     return null;
   }
 }
