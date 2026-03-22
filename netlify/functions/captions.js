@@ -68,14 +68,20 @@ async function tryApify(videoId) {
     });
 
     if (!res.ok) {
-      console.log(`[captions] Apify 실패: ${res.status}`);
+      const errBody = await res.text().catch(() => '');
+      console.log(`[captions] Apify 실패: ${res.status} ${errBody.substring(0, 300)}`);
       return null;
     }
 
     const items = await res.json();
+    console.log(`[captions] Apify 응답 항목 수: ${items?.length}, 첫 항목 키: ${items?.[0] ? Object.keys(items[0]).join(',') : 'none'}`);
+
     const text = items?.[0]?.text || items?.[0]?.transcript || items?.[0]?.content || null;
 
-    if (!text || text.length < 100) return null;
+    if (!text || text.length < 100) {
+      console.log(`[captions] Apify 텍스트 부족: ${text ? text.length : 'null'}`);
+      return null;
+    }
     return text;
   } catch (e) {
     console.log(`[captions] Apify 에러: ${e.message}`);

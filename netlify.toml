@@ -9,6 +9,14 @@
   path = "/api/gemini"
   function = "gemini"
 
+[functions]
+  # Apify 동기 호출에 시간이 걸릴 수 있으므로 타임아웃 연장
+  external_node_modules = []
+
+[functions."captions"]
+  # 자막 추출 함수 타임아웃 60초 (Apify 동기 호출 대기)
+  timeout = 60
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
