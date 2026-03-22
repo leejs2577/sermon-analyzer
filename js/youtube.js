@@ -27,35 +27,42 @@ const YouTube = (() => {
   }
 
   /**
-   * oEmbed API로 영상 메타정보 가져오기
+   * oEmbed API + 발행 날짜 병렬 조회
    */
   async function fetchVideoInfo(videoId) {
     const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    
-    try {
-      const resp = await fetch(oembedUrl);
-      if (!resp.ok) throw new Error('oEmbed 요청 실패');
-      const data = await resp.json();
-      
-      return {
-        title: data.title || '',
-        channel: data.author_name || '',
-        channelUrl: data.author_url || '',
-        thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        thumbnailHq: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-        videoId: videoId,
-        url: `https://www.youtube.com/watch?v=${videoId}`
-      };
-    } catch (e) {
+
+    const [oembedResult, dateResult] = await Promise.allSettled([
+      fetch(oembedUrl).then(r => { if (!r.ok) throw new Error('oEmbed 실패'); return r.json(); }),
+      fetch(`/api/video-date?videoId=${videoId}`).then(r => r.json()),
+    ]);
+
+    const oembed = oembedResult.status === 'fulfilled' ? oembedResult.value : null;
+    const dateData = dateResult.status === 'fulfilled' ? dateResult.value : {};
+
+    if (!oembed) {
       return {
         title: '영상 정보를 가져올 수 없습니다',
         channel: '',
+        channelUrl: '',
         thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         thumbnailHq: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         videoId: videoId,
-        url: `https://www.youtube.com/watch?v=${videoId}`
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        publishedAt: dateData.publishedAt || null,
       };
     }
+
+    return {
+      title: oembed.title || '',
+      channel: oembed.author_name || '',
+      channelUrl: oembed.author_url || '',
+      thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+      thumbnailHq: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      videoId: videoId,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      publishedAt: dateData.publishedAt || null,  // YouTube 영상 발행 날짜 (YYYY-MM-DD)
+    };
   }
 
   return {
