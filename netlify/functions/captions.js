@@ -21,28 +21,26 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'videoId required' }) };
   }
 
+  const debugLog = [];
+
   try {
     // 1차 시도: ANDROID Innertube API
-    const result = await tryAndroidInnertube(videoId);
+    const result = await tryAndroidInnertube(videoId, debugLog);
     if (result) {
-      console.log(`[captions] ANDROID 방식 성공, 길이: ${result.length}`);
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: result }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: result, method: 'android' }) };
     }
 
-    // 2차 시도: WEB HTML 파싱 → ytInitialPlayerResponse에서 트랙 추출 → timedtext fetch
-    console.log(`[captions] ANDROID 실패, WEB HTML 방식 시도`);
-    const result2 = await tryWebHtmlParsing(videoId);
+    // 2차 시도: WEB HTML 파싱
+    const result2 = await tryWebHtmlParsing(videoId, debugLog);
     if (result2) {
-      console.log(`[captions] WEB HTML 방식 성공, 길이: ${result2.length}`);
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: result2 }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: result2, method: 'web' }) };
     }
 
-    console.log(`[captions] 모든 방식 실패`);
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: debugLog }) };
 
   } catch (e) {
-    console.error(`[captions] 에러:`, e.message);
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+    debugLog.push(`top_error: ${e.message}`);
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: debugLog }) };
   }
 };
 
@@ -50,7 +48,7 @@ exports.handler = async (event) => {
  * 1차: ANDROID Innertube Player API
  * 가정용 IP에서는 동작하지만 클라우드(AWS) IP에서는 LOGIN_REQUIRED 반환 가능
  */
-async function tryAndroidInnertube(videoId) {
+async function tryAndroidInnertube(videoId, log) {
   try {
     const res = await fetch(INNERTUBE_URL, {
       method: 'POST',
@@ -61,20 +59,22 @@ async function tryAndroidInnertube(videoId) {
       }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) { log.push(`android_http_${res.status}`); return null; }
     const data = await res.json();
     const status = data?.playabilityStatus?.status;
-    console.log(`[captions] ANDROID playabilityStatus: ${status}`);
+    log.push(`android_play_${status}`);
 
     if (status !== 'OK') return null;
 
     const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     const selected = selectKoreanTrack(tracks);
-    if (!selected) return null;
+    if (!selected) { log.push('android_no_ko_track'); return null; }
 
-    return await fetchCaptionText(selected.baseUrl, ANDROID_UA);
+    const text = await fetchCaptionText(selected.baseUrl, ANDROID_UA);
+    if (!text) log.push('android_timedtext_empty');
+    return text;
   } catch (e) {
-    console.log(`[captions] ANDROID 에러: ${e.message}`);
+    log.push(`android_error: ${e.message}`);
     return null;
   }
 }
@@ -83,7 +83,7 @@ async function tryAndroidInnertube(videoId) {
  * 2차: YouTube WEB 페이지 HTML 파싱
  * ytInitialPlayerResponse에서 captionTracks 추출 후 timedtext fetch
  */
-async function tryWebHtmlParsing(videoId) {
+async function tryWebHtmlParsing(videoId, log) {
   try {
     const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
       headers: {
@@ -93,29 +93,33 @@ async function tryWebHtmlParsing(videoId) {
       },
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) { log.push(`html_http_${res.status}`); return null; }
     const html = await res.text();
-    console.log(`[captions] HTML 길이: ${html.length}`);
+    log.push(`html_len_${html.length}`);
 
-    // ytInitialPlayerResponse에서 captionTracks 추출
+    const hasRecaptcha = html.includes('class="g-recaptcha"');
+    if (hasRecaptcha) { log.push('html_recaptcha'); return null; }
+
     const tracks = extractTracksFromHtml(html);
     const selected = selectKoreanTrack(tracks);
     if (!selected) {
-      console.log(`[captions] HTML에서 한국어 트랙 없음`);
+      log.push(`html_tracks_${tracks ? tracks.length : 'null'}_no_ko`);
       return null;
     }
 
-    console.log(`[captions] HTML 트랙 발견: ${selected.languageCode}, kind=${selected.kind || 'manual'}`);
+    log.push(`html_track_${selected.languageCode}_${selected.kind || 'manual'}`);
 
-    // baseUrl로 timedtext fetch (WEB UA + 같은 세션)
+    // baseUrl로 timedtext fetch
     const text = await fetchCaptionText(selected.baseUrl, WEB_UA);
-    if (text) return text;
+    if (text) { log.push('html_timedtext_ok'); return text; }
 
-    // timedtext 빈 응답이면 Innertube get_transcript 시도
-    console.log(`[captions] timedtext 빈 응답, get_transcript 시도`);
-    return await tryGetTranscript(html, videoId);
+    log.push('html_timedtext_empty');
+
+    // get_transcript 폴백
+    const text2 = await tryGetTranscript(html, videoId, log);
+    return text2;
   } catch (e) {
-    console.log(`[captions] WEB HTML 에러: ${e.message}`);
+    log.push(`html_error: ${e.message}`);
     return null;
   }
 }
@@ -172,16 +176,14 @@ function extractTracksFromHtml(html) {
  * Innertube get_transcript API (WEB 클라이언트)
  * HTML에서 innertubeApiKey, visitorData를 추출하여 호출
  */
-async function tryGetTranscript(html, videoId) {
+async function tryGetTranscript(html, videoId, log) {
   try {
     const apiKeyMatch = html.match(/"innertubeApiKey":"([^"]+)"/);
     const visitorMatch = html.match(/"visitorData":"([^"]+)"/);
-    if (!apiKeyMatch) return null;
+    if (!apiKeyMatch) { log.push('transcript_no_apikey'); return null; }
 
     const apiKey = apiKeyMatch[1];
     const visitorData = visitorMatch ? visitorMatch[1] : '';
-
-    // protobuf params 생성
     const params = buildTranscriptParams(videoId);
 
     const res = await fetch(`https://www.youtube.com/youtubei/v1/get_transcript?key=${apiKey}`, {
@@ -204,17 +206,23 @@ async function tryGetTranscript(html, videoId) {
       }),
     });
 
+    log.push(`transcript_http_${res.status}`);
     if (!res.ok) return null;
     const data = await res.json();
 
-    // 트랜스크립트 세그먼트 추출
+    // 에러 확인
+    if (data.error) {
+      log.push(`transcript_err_${data.error.status || data.error.code}`);
+      return null;
+    }
+
     const segments = data?.actions?.[0]?.updateEngagementPanelAction
       ?.content?.transcriptRenderer?.content
       ?.transcriptSearchPanelRenderer?.body
       ?.transcriptSegmentListRenderer?.initialSegments;
 
     if (!Array.isArray(segments) || segments.length === 0) {
-      console.log(`[captions] get_transcript 세그먼트 없음`);
+      log.push(`transcript_no_segments_keys_${Object.keys(data).join(',')}`);
       return null;
     }
 
@@ -222,10 +230,10 @@ async function tryGetTranscript(html, videoId) {
       .map(seg => seg?.transcriptSegmentRenderer?.snippet?.runs?.map(r => r.text).join('') || '')
       .filter(Boolean);
 
-    console.log(`[captions] get_transcript 세그먼트 수: ${texts.length}`);
+    log.push(`transcript_segments_${texts.length}`);
     return texts.join(' ').replace(/\s+/g, ' ').trim();
   } catch (e) {
-    console.log(`[captions] get_transcript 에러: ${e.message}`);
+    log.push(`transcript_error: ${e.message}`);
     return null;
   }
 }
