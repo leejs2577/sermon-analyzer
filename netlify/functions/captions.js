@@ -85,11 +85,13 @@ async function tryAndroidInnertube(videoId, log) {
  */
 async function tryWebHtmlParsing(videoId, log) {
   try {
+    // CONSENT 쿠키 설정 — YouTube가 consent 없이는 captions를 미제공
     const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
       headers: {
         'User-Agent': WEB_UA,
         'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cookie': 'SOCS=CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjQwNTI4LjA3X3AwGgJrbyACGgYIgJnGtQY; CONSENT=PENDING+987',
       },
     });
 
