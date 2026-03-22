@@ -1,13 +1,14 @@
 /* ═══════════════════════════════════════════════════════
    captions — YouTube 영상 자막 추출
-   ANDROID Innertube Player API로 captionTracks 조회 후
-   서명된 baseUrl로 timedtext XML 호출하여 자막 텍스트 반환
+   1차: ANDROID Innertube Player API (가정용 IP에서 동작)
+   2차: WEB HTML 파싱 + Innertube get_transcript (클라우드 IP 폴백)
    API 키 불필요
    ═══════════════════════════════════════════════════════ */
 
 const INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
 const ANDROID_VERSION = '20.10.38';
 const ANDROID_UA = `com.google.android.youtube/${ANDROID_VERSION} (Linux; U; Android 14)`;
+const WEB_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 exports.handler = async (event) => {
   const headers = {
@@ -21,76 +22,256 @@ exports.handler = async (event) => {
   }
 
   try {
-    // Innertube Player API (ANDROID 클라이언트)로 자막 트랙 조회
-    const playerRes = await fetch(INNERTUBE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': ANDROID_UA,
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: 'ANDROID',
-            clientVersion: ANDROID_VERSION,
-          },
-        },
-        videoId: videoId,
-      }),
-    });
-
-    console.log(`[captions] Innertube 응답 status: ${playerRes.status}`);
-    if (!playerRes.ok) {
-      console.log(`[captions] Innertube 실패: ${playerRes.status} ${playerRes.statusText}`);
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `innertube_status_${playerRes.status}` }) };
+    // 1차 시도: ANDROID Innertube API
+    const result = await tryAndroidInnertube(videoId);
+    if (result) {
+      console.log(`[captions] ANDROID 방식 성공, 길이: ${result.length}`);
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: result }) };
     }
 
-    const playerData = await playerRes.json();
-    const playStatus = playerData?.playabilityStatus?.status;
-    const tracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-
-    console.log(`[captions] playabilityStatus: ${playStatus}, tracks: ${tracks ? tracks.length : 'null'}`);
-
-    if (!Array.isArray(tracks) || tracks.length === 0) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `no_tracks_play_${playStatus}` }) };
+    // 2차 시도: WEB HTML 파싱 → ytInitialPlayerResponse에서 트랙 추출 → timedtext fetch
+    console.log(`[captions] ANDROID 실패, WEB HTML 방식 시도`);
+    const result2 = await tryWebHtmlParsing(videoId);
+    if (result2) {
+      console.log(`[captions] WEB HTML 방식 성공, 길이: ${result2.length}`);
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: result2 }) };
     }
 
-    // 한국어 자막 트랙 선택 (수동 우선, 자동생성 폴백)
-    const isKo = (t) => /^ko(-[A-Za-z]+)?$/.test(t.languageCode);
-    const isAsr = (t) => (t.kind || '').toLowerCase() === 'asr';
-
-    const koManual = tracks.find(t => isKo(t) && !isAsr(t));
-    const koAuto = tracks.find(t => isKo(t) && isAsr(t));
-    const selected = koManual || koAuto;
-
-    if (!selected) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
-    }
-
-    // 서명된 baseUrl로 timedtext API 호출
-    const fullText = await fetchCaptionText(selected.baseUrl);
-
-    console.log(`[captions] 자막 텍스트 길이: ${fullText ? fullText.length : 'null'}`);
-    if (!fullText || fullText.length < 100) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `text_too_short_${fullText ? fullText.length : 0}` }) };
-    }
-
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: fullText }) };
+    console.log(`[captions] 모든 방식 실패`);
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
 
   } catch (e) {
     console.error(`[captions] 에러:`, e.message);
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `error_${e.message}` }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
   }
 };
 
 /**
- * timedtext API에서 자막 텍스트 추출
- * srv3(XML) 형식과 json3 형식 모두 지원
+ * 1차: ANDROID Innertube Player API
+ * 가정용 IP에서는 동작하지만 클라우드(AWS) IP에서는 LOGIN_REQUIRED 반환 가능
  */
-async function fetchCaptionText(baseUrl) {
+async function tryAndroidInnertube(videoId) {
+  try {
+    const res = await fetch(INNERTUBE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': ANDROID_UA },
+      body: JSON.stringify({
+        context: { client: { clientName: 'ANDROID', clientVersion: ANDROID_VERSION } },
+        videoId,
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const status = data?.playabilityStatus?.status;
+    console.log(`[captions] ANDROID playabilityStatus: ${status}`);
+
+    if (status !== 'OK') return null;
+
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    const selected = selectKoreanTrack(tracks);
+    if (!selected) return null;
+
+    return await fetchCaptionText(selected.baseUrl, ANDROID_UA);
+  } catch (e) {
+    console.log(`[captions] ANDROID 에러: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * 2차: YouTube WEB 페이지 HTML 파싱
+ * ytInitialPlayerResponse에서 captionTracks 추출 후 timedtext fetch
+ */
+async function tryWebHtmlParsing(videoId) {
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'User-Agent': WEB_UA,
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!res.ok) return null;
+    const html = await res.text();
+    console.log(`[captions] HTML 길이: ${html.length}`);
+
+    // ytInitialPlayerResponse에서 captionTracks 추출
+    const tracks = extractTracksFromHtml(html);
+    const selected = selectKoreanTrack(tracks);
+    if (!selected) {
+      console.log(`[captions] HTML에서 한국어 트랙 없음`);
+      return null;
+    }
+
+    console.log(`[captions] HTML 트랙 발견: ${selected.languageCode}, kind=${selected.kind || 'manual'}`);
+
+    // baseUrl로 timedtext fetch (WEB UA + 같은 세션)
+    const text = await fetchCaptionText(selected.baseUrl, WEB_UA);
+    if (text) return text;
+
+    // timedtext 빈 응답이면 Innertube get_transcript 시도
+    console.log(`[captions] timedtext 빈 응답, get_transcript 시도`);
+    return await tryGetTranscript(html, videoId);
+  } catch (e) {
+    console.log(`[captions] WEB HTML 에러: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * HTML에서 captionTracks 추출 (ytInitialPlayerResponse 또는 인라인 JSON)
+ */
+function extractTracksFromHtml(html) {
+  // 방법1: ytInitialPlayerResponse 변수에서 추출
+  const varMarker = 'var ytInitialPlayerResponse = ';
+  const varIdx = html.indexOf(varMarker);
+  if (varIdx !== -1) {
+    const start = varIdx + varMarker.length;
+    let depth = 0;
+    for (let i = start; i < Math.min(start + 500000, html.length); i++) {
+      if (html[i] === '{') depth++;
+      else if (html[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          try {
+            const obj = JSON.parse(html.slice(start, i + 1));
+            const tracks = obj?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+            if (Array.isArray(tracks) && tracks.length > 0) return tracks;
+          } catch { /* 파싱 실패 시 방법2로 */ }
+          break;
+        }
+      }
+    }
+  }
+
+  // 방법2: "captionTracks": 인라인에서 대괄호 균형 매칭
+  const marker = '"captionTracks":';
+  const idx = html.indexOf(marker);
+  if (idx === -1) return null;
+
+  const arrStart = html.indexOf('[', idx + marker.length);
+  if (arrStart === -1) return null;
+
+  let depth = 0;
+  for (let i = arrStart; i < Math.min(arrStart + 10000, html.length); i++) {
+    if (html[i] === '[') depth++;
+    else if (html[i] === ']') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(html.substring(arrStart, i + 1)); }
+        catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Innertube get_transcript API (WEB 클라이언트)
+ * HTML에서 innertubeApiKey, visitorData를 추출하여 호출
+ */
+async function tryGetTranscript(html, videoId) {
+  try {
+    const apiKeyMatch = html.match(/"innertubeApiKey":"([^"]+)"/);
+    const visitorMatch = html.match(/"visitorData":"([^"]+)"/);
+    if (!apiKeyMatch) return null;
+
+    const apiKey = apiKeyMatch[1];
+    const visitorData = visitorMatch ? visitorMatch[1] : '';
+
+    // protobuf params 생성
+    const params = buildTranscriptParams(videoId);
+
+    const res = await fetch(`https://www.youtube.com/youtubei/v1/get_transcript?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': WEB_UA,
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20241201.00.00',
+            hl: 'ko',
+            gl: 'KR',
+            visitorData,
+          },
+        },
+        params,
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    // 트랜스크립트 세그먼트 추출
+    const segments = data?.actions?.[0]?.updateEngagementPanelAction
+      ?.content?.transcriptRenderer?.content
+      ?.transcriptSearchPanelRenderer?.body
+      ?.transcriptSegmentListRenderer?.initialSegments;
+
+    if (!Array.isArray(segments) || segments.length === 0) {
+      console.log(`[captions] get_transcript 세그먼트 없음`);
+      return null;
+    }
+
+    const texts = segments
+      .map(seg => seg?.transcriptSegmentRenderer?.snippet?.runs?.map(r => r.text).join('') || '')
+      .filter(Boolean);
+
+    console.log(`[captions] get_transcript 세그먼트 수: ${texts.length}`);
+    return texts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch (e) {
+    console.log(`[captions] get_transcript 에러: ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * get_transcript params 생성 (base64 인코딩 protobuf)
+ */
+function buildTranscriptParams(videoId) {
+  // 간단한 protobuf 인코딩: field 1 { field 1: videoId }
+  const vidBytes = Buffer.from(videoId, 'utf8');
+
+  // inner: 0a [len] [videoId]
+  const inner = Buffer.concat([
+    Buffer.from([0x0a, vidBytes.length]),
+    vidBytes,
+  ]);
+
+  // outer: 0a [len] [inner]
+  const outer = Buffer.concat([
+    Buffer.from([0x0a, inner.length]),
+    inner,
+  ]);
+
+  return outer.toString('base64');
+}
+
+/**
+ * 한국어 자막 트랙 선택 (수동 우선, 자동생성 폴백)
+ */
+function selectKoreanTrack(tracks) {
+  if (!Array.isArray(tracks) || tracks.length === 0) return null;
+
+  const isKo = (t) => /^ko(-[A-Za-z]+)?$/.test(t.languageCode);
+  const isAsr = (t) => (t.kind || '').toLowerCase() === 'asr';
+
+  return tracks.find(t => isKo(t) && !isAsr(t))
+    || tracks.find(t => isKo(t) && isAsr(t));
+}
+
+/**
+ * timedtext API에서 자막 텍스트 추출
+ */
+async function fetchCaptionText(baseUrl, userAgent) {
   try {
     const res = await fetch(baseUrl, {
-      headers: { 'User-Agent': ANDROID_UA },
+      headers: { 'User-Agent': userAgent || WEB_UA },
     });
 
     if (!res.ok) return null;
