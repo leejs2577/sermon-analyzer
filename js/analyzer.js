@@ -24,8 +24,13 @@ const Analyzer = (() => {
       ...resolveChurchAndPreacher(videoInfo)
     };
 
-    const prompt = buildPrompt(videoInfo, confirmedMeta);
-    const responseText = await LLMProvider.generate(prompt, { youtubeUrl: videoInfo.url });
+    const hasCaptions = !!videoInfo.captions;
+    const prompt = buildPrompt(videoInfo, confirmedMeta, hasCaptions);
+
+    // 자막 기반이면 youtubeUrl 전달 안 함 → gemini.js에서 fileData 제외
+    const responseText = await LLMProvider.generate(prompt, {
+      youtubeUrl: hasCaptions ? null : videoInfo.url
+    });
     const result = parseResponse(responseText);
 
     // 확정 메타 한 번만 병합 (빈 문자열이면 Gemini 결과 유지)
@@ -58,7 +63,7 @@ const Analyzer = (() => {
   /**
    * 프롬프트 생성
    */
-  function buildPrompt(videoInfo, confirmedMeta) {
+  function buildPrompt(videoInfo, confirmedMeta, hasCaptions = false) {
     // 확정되지 않은 메타만 Gemini에게 판단 요청
     const needChurch = !confirmedMeta.church;
     const needPreacher = !confirmedMeta.preacher;
@@ -84,16 +89,24 @@ const Analyzer = (() => {
     metaSchemaFields.push('    "worshipType": "예배 종류 (주일예배, 수요예배, 새벽예배, 금요기도회, 사경회 등)"');
     metaSchemaFields.push('    "tags": ["태그1", "태그2", "태그3", "태그4", "태그5"]');
 
+    const introText = hasCaptions
+      ? '아래 제공된 설교 자막 텍스트를 **처음부터 끝까지** 읽고, 아래 지침에 따라 분석해 주세요.'
+      : '위에 첨부된 YouTube 설교 영상을 **처음부터 끝까지** 시청하고, 아래 지침에 따라 분석해 주세요.';
+
+    const captionNote = hasCaptions
+      ? '\n※ 자막은 자동 생성일 수 있으므로, 문맥에 맞지 않는 표현은 적절히 보정하세요.'
+      : '';
+
     return `당신은 한국 개신교 설교를 깊이 이해하고, 핵심을 정리하여 성도에게 전달하는 전문가입니다.
 
-위에 첨부된 YouTube 설교 영상을 **처음부터 끝까지** 시청하고, 아래 지침에 따라 분석해 주세요.
+${introText}
 
 ═══════════════════════════════════
 📋 영상 메타 정보 (참고용)
 ═══════════════════════════════════
 - 영상 제목: ${videoInfo.title || '(알 수 없음)'}
 - 채널명: ${videoInfo.channel || '(알 수 없음)'}
-${metaInstruction}
+${metaInstruction}${captionNote}
 
 ═══════════════════════════════════
 ✍️ 문체 지침 (매우 중요)
@@ -179,7 +192,12 @@ ${metaSchemaFields.join(',\n')}
 6. 반드시 유효한 JSON만 출력하세요. 마크다운 코드블록(\`\`\`)으로 감싸지 마세요.
 7. 전체적으로 **bold**와 ==하이라이트==를 적극 활용하여 가독성을 높이세요.
 8. 영상이 길수록 각 섹션 설명을 간결하게 줄이고, 중요 주제 전체를 균형 있게 다루세요. 특히 결론·적용 부분도 반드시 포함하세요.
-9. 모든 텍스트는 반드시 "~합니다/~입니다/~됩니다" 설명체 존댓말로 작성하세요.`;
+9. 모든 텍스트는 반드시 "~합니다/~입니다/~됩니다" 설명체 존댓말로 작성하세요.${hasCaptions ? `
+
+═══════════════════════════════════
+📝 설교 자막 텍스트
+═══════════════════════════════════
+${videoInfo.captions}` : ''}`;
   }
 
   /**

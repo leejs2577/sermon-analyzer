@@ -276,25 +276,27 @@
     resetProgress();
     disableAnalyzeBtn(true);
 
-    // Gemini 직접 분석: 자막 추출 단계 스킵
-    updateStep('step2', 'done', '완료');
-
     try {
-      // Step 1: 영상 정보 추출
+      // Step 1: 영상 정보 + 자막 추출 (병렬)
       updateStep('step1', 'active', '준비중');
+      updateStep('step2', 'active', '자막 추출 중');
       updateProgressBar(15);
 
       const videoInfo = await YouTube.fetchVideoInfo(videoId);
 
       showVideoPreview(videoInfo);
       updateStep('step1', 'done', '완료');
-      updateProgressBar(30);
 
-      // Step 2: 스킵
-      updateProgressBar(50);
+      // Step 2: 자막 추출 결과 반영
+      if (videoInfo.captions) {
+        updateStep('step2', 'done', '자막 추출 완료');
+      } else {
+        updateStep('step2', 'done', '자막 없음 — 영상 직접 분석');
+      }
+      updateProgressBar(40);
 
       // Step 3: 설교 내용 분석
-      updateStep('step3', 'active', '설교를 요약하고 있습니다');
+      updateStep('step3', 'active', videoInfo.captions ? '자막 기반 분석 중' : '영상 직접 분석 중');
       updateProgressBar(60);
 
       // 분석 중 60% → 90% 서서히 증가

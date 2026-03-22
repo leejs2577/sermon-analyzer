@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════
-   YouTube Module v3
+   YouTube Module v4
    - URL 파싱 (videoId 추출)
    - oEmbed API로 메타정보 (제목, 채널, 썸네일)
-   - 자막 추출은 제거됨 → Gemini가 YouTube URL을 직접 분석
+   - 자막 추출 (한국어 우선, 자동생성 폴백)
    ═══════════════════════════════════════════════════════ */
 
 const YouTube = (() => {
@@ -27,18 +27,20 @@ const YouTube = (() => {
   }
 
   /**
-   * oEmbed API + 발행 날짜 병렬 조회
+   * oEmbed API + 발행 날짜 + 자막 병렬 조회
    */
   async function fetchVideoInfo(videoId) {
     const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
 
-    const [oembedResult, dateResult] = await Promise.allSettled([
+    const [oembedResult, dateResult, captionsResult] = await Promise.allSettled([
       fetch(oembedUrl).then(r => { if (!r.ok) throw new Error('oEmbed 실패'); return r.json(); }),
       fetch(`/api/video-date?videoId=${videoId}`).then(r => r.json()),
+      fetch(`/api/captions?videoId=${videoId}`).then(r => r.json()),
     ]);
 
     const oembed = oembedResult.status === 'fulfilled' ? oembedResult.value : null;
     const dateData = dateResult.status === 'fulfilled' ? dateResult.value : {};
+    const captionsData = captionsResult.status === 'fulfilled' ? captionsResult.value : {};
 
     if (!oembed) {
       return {
@@ -50,6 +52,7 @@ const YouTube = (() => {
         videoId: videoId,
         url: `https://www.youtube.com/watch?v=${videoId}`,
         publishedAt: dateData.publishedAt || null,
+        captions: captionsData.captions || null,
       };
     }
 
@@ -61,7 +64,8 @@ const YouTube = (() => {
       thumbnailHq: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       videoId: videoId,
       url: `https://www.youtube.com/watch?v=${videoId}`,
-      publishedAt: dateData.publishedAt || null,  // YouTube 영상 발행 날짜 (YYYY-MM-DD)
+      publishedAt: dateData.publishedAt || null,
+      captions: captionsData.captions || null,
     };
   }
 
