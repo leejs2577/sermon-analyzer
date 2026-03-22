@@ -39,15 +39,20 @@ exports.handler = async (event) => {
       }),
     });
 
+    console.log(`[captions] Innertube 응답 status: ${playerRes.status}`);
     if (!playerRes.ok) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+      console.log(`[captions] Innertube 실패: ${playerRes.status} ${playerRes.statusText}`);
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `innertube_status_${playerRes.status}` }) };
     }
 
     const playerData = await playerRes.json();
+    const playStatus = playerData?.playabilityStatus?.status;
     const tracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
+    console.log(`[captions] playabilityStatus: ${playStatus}, tracks: ${tracks ? tracks.length : 'null'}`);
+
     if (!Array.isArray(tracks) || tracks.length === 0) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `no_tracks_play_${playStatus}` }) };
     }
 
     // 한국어 자막 트랙 선택 (수동 우선, 자동생성 폴백)
@@ -65,15 +70,16 @@ exports.handler = async (event) => {
     // 서명된 baseUrl로 timedtext API 호출
     const fullText = await fetchCaptionText(selected.baseUrl);
 
+    console.log(`[captions] 자막 텍스트 길이: ${fullText ? fullText.length : 'null'}`);
     if (!fullText || fullText.length < 100) {
-      return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `text_too_short_${fullText ? fullText.length : 0}` }) };
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ captions: fullText }) };
 
   } catch (e) {
     console.error(`[captions] 에러:`, e.message);
-    return { statusCode: 200, headers, body: JSON.stringify({ captions: null }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ captions: null, debug: `error_${e.message}` }) };
   }
 };
 
